@@ -1,0 +1,450 @@
+#!/bin/sh
+#set -o xtrace 
+#(C) COPYRIGHT International Business Machines Corp., 2004, 2014. All Rights Reserved * Licensed Materials - Property of IBM
+
+# save the original JAVA_HOME 
+ISA_SAVED_JAVA_HOME=${JAVA_HOME}
+export ISA_SAVED_JAVA_HOME
+
+os=`uname`
+if [ $os != 'SunOS' ]
+then
+   #Save original value
+   oldIFS=$IFS
+   #Just a newline char
+   IFS='
+   '
+fi
+
+# save the path used to run this script
+rundir=`dirname $0`
+
+#set DEBUG_OPTS=-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=8000
+
+cd $rundir
+CUR_DIR=`pwd`
+AUTOPD_HOME=$CUR_DIR
+
+# create empty directory called "noDirectory"
+if [ ! -d ${AUTOPD_HOME}/noDirectory ];
+then
+   mkdir ${AUTOPD_HOME}/noDirectory
+fi
+
+export AUTOPD_HOME
+
+LOG_CONFIG=$AUTOPD_HOME/properties/logger.properties
+
+DATA_HOME=$AUTOPD_HOME
+TMP_DIR=$AUTOPD_HOME/tmp
+USEHOME=true
+LAPSTATUS_HOME=${AUTOPD_HOME}/lap_status
+PROXY_CONFIG=-Djava.net.useSystemProxies=true
+
+for PARM in $1 $2 $3 $4 $5 $6 $7 $8 $9
+   do
+#     In Information Server -useHome is always used and it is forced
+#      if [ "X$PARM" = "X-useHome" ] 
+#         then
+#            USEHOME=true
+#         fi
+      if [ "X$PARM" = "X-promptForProxy" ] 
+         then
+            PROXY_CONFIG=
+         fi
+   done 
+   
+for f in `find . -name '*.sh'`
+   do 
+      if [ ! -x $f ] 
+      then 
+            if [ -w $f ]
+            then
+                  chmod +x $f
+            fi     
+            if [ ! -x $f ] 		
+            then
+                  NOT_EXEC=$NOT_EXEC\ $f
+            fi
+      fi 
+   done 
+
+if [ X != X$NOT_EXEC ]
+then
+      echo WARNING:  The following files are not executable.  This may 
+      echo result in unpredictable results or failure.
+      echo $NOT_EXEC 
+fi
+   
+if [ "$USEHOME" = "true" ]
+then
+      if test -f $AUTOPD_HOME/scripts/env.bat
+      then
+            DATA_DIR=`(cat $AUTOPD_HOME/scripts/env.bat;echo)|grep DATA_DIR|sed 's/SET DATA_DIR=//g'`
+      fi
+      if [ X$DATA_DIR = X ] 
+      then
+            DATA_DIR=.
+      fi
+      PID=$$
+      TMP_DIR=/tmp/.ISALite_${USER}_$PID
+      DATA_HOME=$HOME/.ISALite
+      if [ ! -d ${DATA_HOME} ];
+      then
+         mkdir $DATA_HOME 
+      fi
+      if [ ! -d ${DATA_HOME}/log ];
+      then
+         mkdir $DATA_HOME/log
+      fi
+      cp log/* $DATA_HOME/log > /dev/null 2>&1
+      DATA_HOME=$DATA_HOME/$DATA_DIR
+      if [ ! -d ${DATA_HOME}/properties ];
+      then
+          mkdir -p $DATA_HOME/properties
+          if [ ! -f ${DATA_HOME}/properties/autopdcurrentstate.properties ];
+          then
+              cp $AUTOPD_HOME/properties/autopdcurrentstate.properties $DATA_HOME/properties/autopdcurrentstate.properties
+          fi
+      fi
+      LOG_CONFIG=$AUTOPD_HOME/properties/logger-home.properties
+      
+      LAPSTATUS_HOME=${DATA_HOME}/lap_status  
+      if [ ! -d ${LAPSTATUS_HOME} ];
+      then
+          mkdir $LAPSTATUS_HOME 
+      fi
+      if [ ! -d ${LAPSTATUS_HOME}/license ];
+      then
+          mkdir $LAPSTATUS_HOME/license
+      fi
+      # if downloaded from DCF site, do not show LAP panel
+      if test -f $AUTOPD_HOME/lap_status/license/status.dat 
+      then
+          mkdir $LAPSTATUS_HOME/ISAversion113S11310 > /dev/null 2>&1
+      fi
+      # if not previously seen and not downloaded from DCF site, do show LAP panel
+      if [ ! -d ${LAPSTATUS_HOME}/ISAversion113S11310 ];
+      then
+          rm $LAPSTATUS_HOME/license/status.dat > /dev/null 2>&1
+      fi
+      # indicate that LAP panel has been checked for in this ISA release
+      if [ ! -d ${LAPSTATUS_HOME}/ISAversion113S11310 ];
+      then
+          mkdir $LAPSTATUS_HOME/ISAversion113S11310
+      fi
+      if test -f $AUTOPD_HOME/lap_status/license/status.dat 
+      then
+          cp $AUTOPD_HOME/lap_status/license/status.dat $LAPSTATUS_HOME/license/status.dat
+      fi
+fi
+   
+
+# cd $TMP_DIR
+
+if [ ! -d $TMP_DIR/properties ]
+then
+      mkdir -p $TMP_DIR/properties
+fi
+JAVA_VER=$TMP_DIR/properties/java_ver.txt
+export JAVA_VER
+
+if [ "${1}" = "-help" ]; then
+	# set the default locale when LANG=C
+	if [ X$LANG = X ] || [ $LANG = C ] 
+	then
+		loc=`locale -a | grep -i en_us | head -1`
+		LANG=$loc
+		export LANG
+	fi
+
+	#The logic in this script presumes that translated user help files will be found
+	#in the util\help directory located under the ISA Lite install root directory.
+	#These files must be of the form userhelp_la_CC.txt or userhelp_la.txt, where la is
+	#the ISO language code in lowercase and CC is the country code.
+
+	#Grab the first 5 chars of $LANG
+	_lang=`echo ${LANG} | cut -c1-5`
+
+	#Grab the first 2 chars of $LANG and make them lowercase
+	_lang2=`echo ${LANG} | cut -c1-2 | tr '[A-Z]' '[a-z]'`
+	
+	#Grab chars 3 thru 5 of $LANG
+	_lang3=`echo ${LANG} | cut -c3-5`
+
+	#Define the path in which all translated scripts must exist
+	_isaBase=${AUTOPD_HOME}/util/help/userhelp_
+	#This _file1 represents an exact match of the first 5 chars of $LANG and the script name
+	_file1=${_isaBase}${_lang}.txt
+	#This _file2 represents a match of the first 5 chars where the first 2 chars are in lowercase
+	_file2=${_isaBase}${_lang2}${_lang3}.txt
+	#This _file3 represents a match of the first 2 chars which have been lowercased
+	_file3=${_isaBase}${_lang2}.txt
+
+	#From this point, we just test whether each file exists, stopping at the first match
+	if test -f ${_file1}
+	then
+		scriptFile=${_file1}
+	else
+		if test -f ${_file2}
+		then
+			scriptFile=${_file2}
+		else
+			if test -f ${_file3}
+			then
+				scriptFile=${_file3}
+			else
+				# no translated script found, must use english script instead
+				scriptFile=${_isaBase}en.txt
+			fi
+		fi
+	fi
+
+	cat ${scriptFile}
+	exit 0
+fi
+
+
+if [ "${1}" = "-version" ]; then
+	VERSIONFILE=properties/version/version.properties
+	for LINE in `cat $VERSIONFILE`
+	do
+		TMP=`echo $LINE | grep '='`
+		#Check to see if an '=' delimeter was found, if not then ignore that line
+		if [ "$TMP" != "" ]; then
+			#Replace the '_' char with a space char
+			echo "$LINE" | tr '_' ' '
+		fi
+	done
+	exit 0
+fi
+
+# set the default locale when LANG=C
+if [ X$LANG = X ] || [ $LANG = C ] 
+then
+	loc=`locale -a | grep -i en_us | head -1`
+	LANG=$loc
+	export LANG
+fi
+
+#set the modified AutoPD Classpath
+AUTOPD_LIB=${AUTOPD_HOME}/lib
+
+CISA_HOME=${AUTOPD_HOME}/cisa
+CISA_CP=${CISA_HOME}
+for filename in ${CISA_HOME}/lib/*.jar
+do
+   CISA_CP=$CISA_CP:$filename
+done
+
+LV_HOME=${AUTOPD_HOME}/levelreport
+
+RASUtils_LIB=${AUTOPD_HOME}/lib/rasutils
+
+AUTOPD_PROPERTIES=${AUTOPD_HOME}/properties
+
+AUTOPD_XML_CP=${AUTOPD_LIB}/xercesImpl.jar:${AUTOPD_LIB}/xmlParserAPIs.jar:${AUTOPD_LIB}/resolver.jar:${AUTOPD_LIB}/ant-jsch.jar:${AUTOPD_LIB}/jsch-0.1.40.jar
+
+AUTOPD_ANT_CP=${AUTOPD_LIB}/ant.jar:${AUTOPD_LIB}/ant-launcher.jar:${AUTOPD_LIB}/jakarta-oro-2.0.7.jar
+
+AUTOPD_LV_CP=${LV_HOME}/lib/invtool.jar:${LV_HOME}/lib/xsdbeans.jar:${LV_HOME}/lib/depcheck.jar:${LV_HOME}/lib/itj157minimal.jar:${LV_HOME}/lib/xalan.jar
+
+AUTOPD_CP=${AUTOPD_HOME}:${AUTOPD_LIB}/autopd.jar:${AUTOPD_LIB}/autopdswing.jar:${RASUtils_LIB}/RASUtils.jar:${AUTOPD_PROPERTIES}:${AUTOPD_ANT_CP}:${CISA_CP}:${AUTOPD_LV_CP}:${AUTOPD_ANT_CP}:${AUTOPD_XML_CP}:${AUTOPD_LIB}/collector.jar:${AUTOPD_LIB}/com.ibm.icu.jar:${AUTOPD_LIB}/esa.jar:${AUTOPD_LIB}/commons-net-1.4.1.jar:lib/jakarta-oro-2.0.7.jar:lib/commons-net-1.4.1.jar:lib/jsch-0.1.40.jar:lib/ant-jsch.jar:.:
+
+PATH_TMP=${PATH}
+
+PATH=${CISA_HOME}/bin:${LV_HOME}:${LV_HOME}/lib:${JAVA_HOME}/bin:${PATH}
+
+
+#try to call setupJava.sh
+if [ -r ${AUTOPD_HOME}/util/setupJava.sh ];
+then
+    . ${AUTOPD_HOME}/util/setupJava.sh
+fi
+
+#loop until we find an acceptable java or the user quits
+while test "$JAVA_FOUND" != "0"
+do
+
+    #If JAVA_HOME is not set, we will try running the java command from the system path
+    #If that doesn't succeed, then we will set JAVA_NOTAVAILABLE variable
+    #ISALite can only run, if JAVA_NOTAVAILABLE is not set
+	
+    if [ -z "${JAVA_HOME}" ]; 
+    then
+        #Try the 'java -version' command to see if java can be found in the system path.
+		echo [JAVA_HOME not defined. Using java from PATH]
+        JAVA_CMD=java
+    else
+		echo [JAVA_HOME is set to ${JAVA_HOME}]
+        JAVA_CMD=$JAVA_HOME/bin/java
+    fi
+
+    $JAVA_CMD -version > $JAVA_VER 2>&1
+    Result=$?
+    if [ ! $Result -eq 0 ]
+    then
+        JAVA_NOTAVAILABLE=1
+    fi
+    echo [Using Java command: $JAVA_CMD]
+	
+    #java command is available either from the system path or JAVA_HOME has been set.
+    if [ -z "${JAVA_NOTAVAILABLE}" ]
+    then
+		
+        #proceed only if we have a java executable to use (i.e., java is on the path or JAVA_HOME resolves to a file called 'java')
+        if [ $Result -eq 0 ] || ( [ ! -z "${JAVA_HOME}" ] && [ -f ${JAVA_CMD} ] )
+        then
+	
+            #get the java version - pipes to standard err
+            #${JAVA_CMD} -version 2> $JAVA_VER
+            # ignore chmod errors
+            chmod 777 $JAVA_VER > /dev/null 2>&1
+            #check that JRE is not on excluded list
+		
+            # determine the OS we are running on
+            os=`uname`
+            if [ $os = "SunOS" ]
+            then    
+                if [ `egrep -c -f util/jre_exclude_list.txt $JAVA_VER` -gt 0 ]; then
+                    echo "ERROR: The following Java Runtime Environment (JRE) is not supported."
+                    echo " "
+                    ${JAVA_CMD} -version
+                    #echo " "
+                    #echo Please set JAVA_HOME to select another JRE or download one from https://www.ibm.com/developerworks/java/jdk/                
+                    #exit 0
+                    JAVA_NOTSUPPORTED=1
+                    JAVA_NOTAVAILABLE=1
+                fi	
+            else
+                if [ `grep -c -f util/jre_exclude_list.txt $JAVA_VER` -gt 0 ]; then
+                    echo "ERROR: The following Java Runtime Environment (JRE) is not supported."
+                    echo " "
+                    ${JAVA_CMD} -version
+                    #echo " "
+                    #echo Please set JAVA_HOME to select another JRE or download one from https://www.ibm.com/developerworks/java/jdk/                
+                    #exit 0
+                    JAVA_NOTSUPPORTED=1
+                    JAVA_NOTAVAILABLE=1
+                fi	
+            fi
+			
+            if [ -z "${JAVA_NOTSUPPORTED}" ]
+            then
+                javaresult=`grep -c 'java version "1\.[23456]' $JAVA_VER`
+                if [ $javaresult -gt 0 ] 
+                then
+                    echo "ERROR: This tool requires JRE 1.7.0 (J9 VM build 2.7) or greater to run."
+                    echo                    
+					echo "On a system where Information Server has been installed, use the java" 
+                    echo "installation path. For IS versions 11.3 and higher"
+                    echo "     The default folder is /opt/IBM/InformationServer/jdk"
+                    echo
+                    echo "If you have IBM WebSphere Application Server installed on the computer," 
+                    echo "use the java installation path"
+                    echo "     [WAS_HOME]/java/jre"
+                    echo "     The default folder is /opt/IBM/WebSphere/AppServer/java/jre"
+                    echo
+
+
+                    #set the flag so that we can prompt the user for a valid java
+                    JAVA_NOTAVAILABLE=1
+                else
+                    #found a java that meets all our tests, so set the flag to come out of the loop
+                    JAVA_FOUND=0
+                    LICENSE_HOME=${AUTOPD_HOME}/licenses
+                    if [ ! -f ${LAPSTATUS_HOME}/license/status.dat ]
+                    then
+                        #Status file does not exist, check if GUI or Console
+                        ${JAVA_CMD} -cp ${AUTOPD_CP} com.ibm.autopd.lap.ConsoleGUI -useHome $*
+                        RETURN_CODE=$?
+                        echo Return Code=${RETURN_CODE}
+                        if [ "x${RETURN_CODE}" = "x1" ]
+                        then
+                            CONSOLE_MODE=-text_only
+                        else
+                            CONSOLE_MODE=
+                        fi
+                        echo "Running License Acceptance Process Tool"
+                        ${JAVA_CMD} -cp ${LICENSE_HOME}/LAPApp.jar  com.ibm.lex.lapapp.LAP -l ${LICENSE_HOME} -s ${LAPSTATUS_HOME}  ${CONSOLE_MODE}
+                    fi
+		       
+                    #Check to see if license was accepted 
+                    if [ -f ${LAPSTATUS_HOME}/license/status.dat ]
+                    then	
+                        # If JAVA_HOME is set, export it so that it is visible to spawned shell scripts
+                        if [ ! -z "${JAVA_HOME}" ]
+                        then
+                            export JAVA_HOME
+                        fi
+
+                        # Warn user if we are going to have problems with logging
+                        if [ ! -d ${DATA_HOME}/log ];
+                        then
+                            echo WARNING: User does not have write access to location $DATA_HOME/log under '$HOME' [$HOME].
+                            echo This is typically caused by attempting to run the ISALite tool using sudo
+                            echo but without all required sudo permissions defined.  You may continue, but
+                            echo no trace or error files will be created, some tools or collections may not
+                            echo work correctly.
+                            echo Enter q to quit, anything else to continue
+                            read LOG_CONTINUE
+                        fi
+                        # LOG_CONTINUE will not be set if warning message not displayed, so will continue
+                        if [ "$LOG_CONTINUE" = "q" ]
+                        then
+                            #user wants to quit, so set the flag which terminates the loop
+                            JAVA_FOUND=0
+                        else
+							echo "------------------------------"
+                            echo Starting ISALite with java: ${JAVA_CMD}
+							echo "------------------------------"
+                            echo
+                            ${JAVA_CMD} $DEBUG_OPTS -Xms64M -Xmx512M -cp ${AUTOPD_CP} $PROXY_CONFIG -Dautopd.home=$AUTOPD_HOME -Dwasprompt=NO_WASPROMPT -Dportalprompt=NO_PORTALPROMPT -Djava.util.logging.config.file=${LOG_CONFIG} com.ibm.autopd.swing.AutoPD -useHome $*
+                            PATH=${PATH_TMP}
+                        fi
+                    else
+                        echo "You must accept the License for ISALite to run successfully."
+		
+                    fi   
+                fi   
+            fi
+        else
+            #no valid java found, so set the flag which will prompt the user for a (hopefully) valid java
+            JAVA_NOTAVAILABLE=1
+        fi
+    else
+        #This is where we prompt the user for a valid java
+        echo " "
+        echo "ISA Lite cannot automatically detect a usable Java executable."
+	    echo " "
+		echo "On a system where Information Server has been installed, use the java" 
+		echo "installation path. For IS versions 11.3 and higher"
+		echo "     The default folder is /opt/IBM/InformationServer/jdk"
+		echo
+		echo "If you have IBM WebSphere Application Server installed on the computer," 
+		echo "use the java installation path"
+		echo "     [WAS_HOME]/java/jre"
+		echo "     The default folder is /opt/IBM/WebSphere/AppServer/java/jre"
+		echo " "
+        echo "If Java is not available, you can download one from https://www.ibm.com/developerworks/java/jdk/"
+        echo " "
+        echo -n "Please enter the path to a Java installation or 'q' to quit: "
+        read JAVA_HOME
+	    
+        if [ "$JAVA_HOME" = "q" ]
+        then
+            #user wants to quit, so set the flag which terminates the loop
+            JAVA_FOUND=0
+        fi
+	
+        echo " "
+        #unset this flag, so that we will once again test this new java for validity
+        JAVA_NOTAVAILABLE=
+        JAVA_NOTSUPPORTED=
+    fi
+
+done
+
+cd ${CUR_DIR}
+# cleanup tmp dir created to hold java version text
+rm -R -f $TMP_DIR
