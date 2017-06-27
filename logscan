@@ -1,0 +1,11 @@
+#!/bin/bash
+egrep -i 'SD4SL1FF9ADFF53082|19.0.1084.46' /Users/subhashgoudsiddhagouni/Downloads/tutorialdata/www1/access.log >> `date +'%b%d_%y'`.log
+
+
+
+crontab -e
+
+MAILTO=*******@gmail.com
+
+48 23 * * * /Users/subhashgoudsiddhagouni/Downloads/tutorialdata/test_script.sh
+~                                                                                 
