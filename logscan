@@ -7,5 +7,8 @@ crontab -e
 
 MAILTO=*******@gmail.com
 
-48 23 * * * /Users/subhashgoudsiddhagouni/Downloads/tutorialdata/test_script.sh
+48 23 * * * /Users/subhashgoudsiddhagouni/Downloads/tutorialdata/test_script.sh     or 
+
+59 */6 * * * script.sh | mail -s "Subject of Mail" someother@address.com
+
 ~                                                                                 
